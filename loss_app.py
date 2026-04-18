@@ -39,12 +39,11 @@ import os
 conn = psycopg2.connect(
     host="aws-1-ap-south-1.pooler.supabase.com",
     port=5432,
-    database="postgres", 
-    user="postgres.glvjgmjtdqnacwdnugzx",
+    dbname="postgres",
+    user="postgres",
     password=os.getenv(":BxJDUJ!awJK5UL"),
     sslmode="require"
 )
-
 cur = conn.cursor()
 
 c.execute("""
