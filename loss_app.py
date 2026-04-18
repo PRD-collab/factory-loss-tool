@@ -41,7 +41,7 @@ conn = psycopg2.connect(
     port=5432,
     database="postgres", 
     user="postgres.glvjgmjtdqnacwdnugzx",
-    password=os.getenv("DB_PASSWORD"),
+    password=os.getenv(":BxJDUJ!awJK5UL"),
     sslmode="require"
 )
 
