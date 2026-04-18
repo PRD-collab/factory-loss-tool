@@ -36,7 +36,7 @@ major_reasons=[
 import psycopg2
 
 conn = psycopg2.connect(
-postgresql://postgres:[:BxJDUJ!awJK5UL]@db.glvjgmjtdqnacwdnugzx.supabase.co:5432/postgres
+"postgresql://postgres:[:BxJDUJ!awJK5UL]@db.glvjgmjtdqnacwdnugzx.supabase.co:5432/postgres"
 )
 c=conn.cursor()
 
