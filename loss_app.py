@@ -33,16 +33,19 @@ major_reasons=[
 
 # ---------------- DATABASE ----------------
 
-from urllib.parse import quote_plus
 import psycopg2
-
-password = quote_plus("[:BxJDUJ!awJK5UL]")
+import os
 
 conn = psycopg2.connect(
-    f"postgresql://postgres:{password}@db.glvjgmjtdqnacwdnugzx.supabase.co:5432/postgres"
+    host="aws-1-ap-south-1.pooler.supabase.com",
+    port=5432,
+    database="postgres", 
+    user="postgres.glvjgmjtdqnacwdnugzx",
+    password=os.getenv("DB_PASSWORD"),
+    sslmode="require"
 )
 
-c=conn.cursor()
+cur = conn.cursor()
 
 c.execute("""
 CREATE TABLE IF NOT EXISTS losses(
