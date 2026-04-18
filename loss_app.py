@@ -33,11 +33,15 @@ major_reasons=[
 
 # ---------------- DATABASE ----------------
 
+from urllib.parse import quote_plus
 import psycopg2
 
+password = quote_plus("[:BxJDUJ!awJK5UL]")
+
 conn = psycopg2.connect(
-"postgresql://postgres:[:BxJDUJ!awJK5UL]@db.glvjgmjtdqnacwdnugzx.supabase.co:5432/postgres"
+    f"postgresql://postgres:{password}@db.glvjgmjtdqnacwdnugzx.supabase.co:5432/postgres"
 )
+
 c=conn.cursor()
 
 c.execute("""
