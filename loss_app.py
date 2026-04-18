@@ -33,7 +33,11 @@ major_reasons=[
 
 # ---------------- DATABASE ----------------
 
-conn=sqlite3.connect("warehouse_loss.db",check_same_thread=False)
+import psycopg2
+
+conn = psycopg2.connect(
+postgresql://postgres:[:BxJDUJ!awJK5UL]@db.glvjgmjtdqnacwdnugzx.supabase.co:5432/postgres
+)
 c=conn.cursor()
 
 c.execute("""
