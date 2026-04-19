@@ -82,23 +82,23 @@ menu = st.sidebar.selectbox(
 # PRODUCTION ENTRY
 # =================================================
 
-# =================================================
-# PRODUCTION ENTRY
-# =================================================
-
 if menu == "Production Entry":
 
     st.title("Production Entry")
 
     date = st.date_input("Select Date")
 
-    # Create matrix
-    rows = []
+    matrix = []
+
     for m in machines:
         for s in shifts:
-            rows.append({"Machine": m, "Shift": s, "Actual": ""})
+            matrix.append({
+                "Machine": m,
+                "Shift": s,
+                "Actual": ""
+            })
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(matrix)
 
     edited = st.data_editor(df, use_container_width=True)
 
@@ -112,21 +112,20 @@ if menu == "Production Entry":
             shift = row["Shift"]
             actual = row["Actual"]
 
-            # safe numeric conversion
             try:
                 actual = float(actual)
             except:
                 continue
 
             target = machines[machine]
+
             gap = target - actual
 
             if gap > 0:
 
-                # prevent duplicate entries
                 cur.execute(
-                    "SELECT COUNT(*) FROM losses WHERE date=%s AND machine=%s AND shift=%s",
-                    (str(date), machine, shift)
+                "SELECT COUNT(*) FROM losses WHERE date=%s AND machine=%s AND shift=%s",
+                (str(date), machine, shift)
                 )
 
                 exists = cur.fetchone()[0]
@@ -146,12 +145,167 @@ if menu == "Production Entry":
             st.stop()
 
         st.session_state.loss_cases = loss_cases
-        st.session_state.date = str(date)
         st.session_state.case_index = 0
+        st.session_state.date = str(date)
         st.session_state.stage = "loss"
-        st.session_state.detail_rows = [{"reason": "", "percent": 100}]
+        st.session_state.detail_rows = [{"reason":"", "percent":100}]
 
         st.rerun()
+
+# =================================================
+# LOSS ENTRY
+# =================================================
+
+    if "stage" in st.session_state and st.session_state.stage == "loss":
+
+        cases = st.session_state.loss_cases
+        idx = st.session_state.case_index
+
+        if idx < len(cases):
+
+            case = cases[idx]
+
+            machine = case["machine"]
+            shift = case["shift"]
+            gap = case["gap"]
+
+            st.subheader(f"{machine} | {shift} | Loss = {gap}")
+
+            major = st.selectbox("Major Reason", major_reasons)
+
+            cur.execute(
+            "SELECT DISTINCT detail_reason FROM losses WHERE machine=%s",
+            (machine,)
+            )
+
+            existing = [r[0] for r in cur.fetchall()]
+
+            if "detail_rows" not in st.session_state:
+                st.session_state.detail_rows = [{"reason":"", "percent":100}]
+
+            rows = st.session_state.detail_rows
+
+            for i, row in enumerate(rows):
+
+                col1, col2 = st.columns([3,1])
+
+                dropdown = col1.selectbox(
+                f"Existing Reason {i+1}",
+                [""] + existing,
+                key=f"d{i}"
+                )
+
+                text = col1.text_input(
+                f"Or Enter New Reason {i+1}",
+                key=f"t{i}"
+                )
+
+                reason = dropdown if dropdown else text
+
+                percent = col2.number_input(
+                "%",
+                min_value=0,
+                max_value=100,
+                value=row["percent"],
+                key=f"p{i}"
+                )
+
+                row["reason"] = reason
+                row["percent"] = percent
+
+            if st.button("Add Another Reason"):
+
+                rows.append({"reason":"", "percent":0})
+                st.session_state.detail_rows = rows
+                st.rerun()
+
+            total = sum(r["percent"] for r in rows)
+
+            st.write("Total Allocation:", total, "%")
+
+            if total != 100:
+                st.warning("Allocation must equal 100%")
+
+            if total == 100:
+
+                if st.button("Save & Next"):
+
+                    for r in rows:
+
+                        loss = gap * (r["percent"] / 100)
+
+                        cur.execute(
+                        """
+                        INSERT INTO losses
+                        (date,machine,shift,major_reason,detail_reason,percent,loss_qty)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                        """,
+                        (
+                        st.session_state.date,
+                        machine,
+                        shift,
+                        major,
+                        r["reason"] if r["reason"] else "General",
+                        r["percent"],
+                        loss
+                        )
+                        )
+
+                    conn.commit()
+
+                    st.session_state.case_index += 1
+                    st.session_state.detail_rows = [{"reason":"", "percent":100}]
+
+                    st.rerun()
+
+        else:
+
+            st.success("All losses recorded")
+
+            del st.session_state.stage
+            del st.session_state.loss_cases
+            del st.session_state.case_index
+
+# =================================================
+# VIEW DATA
+# =================================================
+
+if menu == "View Data":
+
+    st.title("Database Records")
+
+    df = pd.read_sql("SELECT * FROM losses ORDER BY date DESC", conn)
+
+    st.dataframe(df, use_container_width=True)
+
+# =================================================
+# DELETE
+# =================================================
+
+if menu == "Modify/Delete Data":
+
+    st.title("Modify/Delete")
+
+    df = pd.read_sql("SELECT * FROM losses", conn)
+
+    if len(df) == 0:
+
+        st.info("No data")
+
+    else:
+
+        date = st.selectbox("Select Date", sorted(df["date"].unique()))
+
+        ddf = df[df["date"] == date]
+
+        st.dataframe(ddf)
+
+        if st.button("Delete This Date"):
+
+            cur.execute("DELETE FROM losses WHERE date=%s", (date,))
+            conn.commit()
+
+            st.success("Deleted")
 
 # =================================================
 # PARETO
@@ -161,9 +315,10 @@ if menu == "Pareto Analysis":
 
     st.title("Pareto Analysis")
 
-    df = pd.read_sql("SELECT * FROM losses",conn)
+    df = pd.read_sql("SELECT * FROM losses", conn)
 
     if len(df) == 0:
+
         st.info("No data")
 
     else:
@@ -178,17 +333,17 @@ if menu == "Pareto Analysis":
         (df["date"] <= pd.to_datetime(end))
         ]
 
-        machine = st.selectbox("Machine",sorted(df["machine"].unique()))
+        machine = st.selectbox("Machine", sorted(df["machine"].unique()))
 
         mdf = df[df["machine"] == machine]
 
         major = mdf.groupby("major_reason")["loss_qty"].sum().reset_index()
 
-        major = major.sort_values("loss_qty",ascending=False)
+        major = major.sort_values("loss_qty", ascending=False)
 
-        major["cumperc"] = major["loss_qty"].cumsum()/major["loss_qty"].sum()*100
+        major["cumperc"] = major["loss_qty"].cumsum() / major["loss_qty"].sum() * 100
 
-        fig = px.bar(major,x="major_reason",y="loss_qty")
+        fig = px.bar(major, x="major_reason", y="loss_qty")
 
         fig.add_scatter(
         x=major["major_reason"],
@@ -205,13 +360,13 @@ if menu == "Pareto Analysis":
         )
         )
 
-        st.plotly_chart(fig,use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
         detail = mdf.groupby("detail_reason")["loss_qty"].sum().reset_index()
 
-        fig2 = px.bar(detail,x="detail_reason",y="loss_qty")
+        fig2 = px.bar(detail, x="detail_reason", y="loss_qty")
 
-        st.plotly_chart(fig2,use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True)
 
 # =================================================
 # MERGE
@@ -221,20 +376,21 @@ if menu == "Merge Reasons":
 
     st.title("Merge Reasons")
 
-    df = pd.read_sql("SELECT * FROM losses",conn)
+    df = pd.read_sql("SELECT * FROM losses", conn)
 
     if len(df) == 0:
+
         st.info("No data")
 
     else:
 
-        machine = st.selectbox("Machine",sorted(df["machine"].unique()))
+        machine = st.selectbox("Machine", sorted(df["machine"].unique()))
 
         mdf = df[df["machine"] == machine]
 
         reasons = sorted(mdf["detail_reason"].unique())
 
-        selected = st.multiselect("Reasons to Merge",reasons)
+        selected = st.multiselect("Reasons to Merge", reasons)
 
         new_name = st.text_input("New Reason")
 
@@ -244,7 +400,7 @@ if menu == "Merge Reasons":
 
                 cur.execute(
                 "UPDATE losses SET detail_reason=%s WHERE detail_reason=%s AND machine=%s",
-                (new_name,r,machine)
+                (new_name, r, machine)
                 )
 
             conn.commit()
