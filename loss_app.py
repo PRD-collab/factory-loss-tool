@@ -3,7 +3,11 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 import psycopg2
+# ---------------- LOGIN CONFIG ----------------
+APP_PASSWORD = "0457"   # change this to your secure PIN
 
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 st.set_page_config(layout="wide")
 
 # ---------------- MACHINES ----------------
