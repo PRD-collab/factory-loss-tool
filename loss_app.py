@@ -3,12 +3,31 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 import psycopg2
-# ---------------- LOGIN CONFIG ----------------
-APP_PASSWORD = "0457"   # change this to your secure PIN
+# ---------------- LOGIN GATE ----------------
+
+import streamlit as st
+
+APP_PASSWORD = "1234"   # change this to your desired PIN
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
-st.set_page_config(layout="wide")
+
+if not st.session_state.authenticated:
+
+    st.title("Factory Loss Tool Login")
+
+    password = st.text_input("Enter Access PIN", type="password")
+
+    if st.button("Login"):
+
+        if password == APP_PASSWORD:
+            st.session_state.authenticated = True
+            st.success("Login successful")
+            st.rerun()
+        else:
+            st.error("Incorrect PIN")
+
+    st.stop()   # ⛔ THIS STOPS THE APP UNTIL LOGIN IS DONE
 
 # ---------------- MACHINES ----------------
 
