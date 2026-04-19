@@ -1,7 +1,7 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 import plotly.express as px
+import psycopg2
 
 st.set_page_config(layout="wide")
 
@@ -33,18 +33,16 @@ major_reasons=[
 
 # ---------------- DATABASE ----------------
 
-import psycopg2
-import os
-
 conn = psycopg2.connect(
-    host="aws-1-ap-south-1.pooler.supabase.com",
-    port=5432,
-    dbname="postgres",
-    user="postgres",
-    password=os.getenv(":BxJDUJ!awJK5UL"),
+    host=st.secrets["DB_HOST"],
+    port=st.secrets["DB_PORT"],
+    dbname=st.secrets["DB_NAME"],
+    user=st.secrets["DB_USER"],
+    password=st.secrets[":BxJDUJ!awJK5UL"],
     sslmode="require"
 )
-cur = conn.cursor()
+
+c = conn.cursor()
 
 c.execute("""
 CREATE TABLE IF NOT EXISTS losses(
@@ -197,7 +195,7 @@ if menu=="Production Entry":
                         loss=gap*(r["percent"]/100)
 
                         c.execute(
-                        "INSERT INTO losses VALUES (?,?,?,?,?,?,?)",
+                        "INSERT INTO losses VALUES (%s,%s,%s,%s,%s,%s,%s)",
                         (
                         st.session_state.date,
                         machine,
@@ -242,7 +240,7 @@ if menu=="Modify/Delete Data":
 
         if st.button("Delete This Date"):
 
-            c.execute("DELETE FROM losses WHERE date=?",(date,))
+            c.execute("DELETE FROM losses WHERE date=%s",(date,))
             conn.commit()
 
             st.success("Deleted")
@@ -310,7 +308,7 @@ if menu=="Merge Reasons":
             for r in selected:
 
                 c.execute(
-                "UPDATE losses SET detail_reason=? WHERE detail_reason=? AND machine=?",
+                "UPDATE losses SET detail_reason=%s WHERE detail_reason=%s AND machine=%s",
                 (new_name,r,machine)
                 )
 
