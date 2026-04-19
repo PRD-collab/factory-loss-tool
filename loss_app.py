@@ -1,4 +1,5 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
 import plotly.express as px
 import psycopg2
@@ -31,20 +32,20 @@ major_reasons=[
 "Efficiency Loss"
 ]
 
-# ---------------- DATABASE ----------------
+# ---------------- DATABASE (FIXED) ----------------
 
 conn = psycopg2.connect(
     host=st.secrets["DB_HOST"],
     port=st.secrets["DB_PORT"],
     dbname=st.secrets["DB_NAME"],
     user=st.secrets["DB_USER"],
-    password=st.secrets[":BxJDUJ!awJK5UL"],
+    password=st.secrets["DB_PASSWORD"],
     sslmode="require"
 )
 
-c = conn.cursor()
+cur = conn.cursor()
 
-c.execute("""
+cur.execute("""
 CREATE TABLE IF NOT EXISTS losses(
 date TEXT,
 machine TEXT,
@@ -194,7 +195,7 @@ if menu=="Production Entry":
 
                         loss=gap*(r["percent"]/100)
 
-                        c.execute(
+                        cur.execute(
                         "INSERT INTO losses VALUES (%s,%s,%s,%s,%s,%s,%s)",
                         (
                         st.session_state.date,
@@ -240,7 +241,7 @@ if menu=="Modify/Delete Data":
 
         if st.button("Delete This Date"):
 
-            c.execute("DELETE FROM losses WHERE date=%s",(date,))
+            cur.execute("DELETE FROM losses WHERE date=%s",(date,))
             conn.commit()
 
             st.success("Deleted")
@@ -280,7 +281,7 @@ if menu=="Pareto Analysis":
         st.plotly_chart(fig2,use_container_width=True)
 
 # =================================================
-# MACHINE SPECIFIC MERGE
+# MERGE REASONS
 # =================================================
 
 if menu=="Merge Reasons":
@@ -307,7 +308,7 @@ if menu=="Merge Reasons":
 
             for r in selected:
 
-                c.execute(
+                cur.execute(
                 "UPDATE losses SET detail_reason=%s WHERE detail_reason=%s AND machine=%s",
                 (new_name,r,machine)
                 )
