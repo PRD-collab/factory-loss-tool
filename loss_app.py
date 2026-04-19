@@ -101,36 +101,40 @@ if menu == "Production Entry":
 
         loss_cases = []
 
-        for _,row in edited.iterrows():
+for _,row in edited.iterrows():
 
-            machine = row["Machine"]
-            shift = row["Shift"]
-            actual = row["Actual"]
+    machine = row["Machine"]
+    shift = row["Shift"]
+    actual = row["Actual"]
 
-            if pd.isna(actual):
-                continue
+    # Safe numeric conversion
+    try:
+        actual = float(actual)
+    except:
+        continue
 
-            target = machines[machine]
-            gap = target - actual
+    target = machines[machine]
 
-            if gap > 0:
+    gap = target - actual
 
-                cur.execute(
-                "SELECT COUNT(*) FROM losses WHERE date=%s AND machine=%s AND shift=%s",
-                (str(date),machine,shift)
-                )
+    if gap > 0:
 
-                exists = cur.fetchone()[0]
+        cur.execute(
+        "SELECT COUNT(*) FROM losses WHERE date=%s AND machine=%s AND shift=%s",
+        (str(date),machine,shift)
+        )
 
-                if exists > 0:
-                    st.error(f"Entry already exists for {machine} {shift}")
-                    st.stop()
+        exists = cur.fetchone()[0]
 
-                loss_cases.append({
-                "machine":machine,
-                "shift":shift,
-                "gap":gap
-                })
+        if exists > 0:
+            st.error(f"Entry already exists for {machine} {shift}")
+            st.stop()
+
+        loss_cases.append({
+        "machine":machine,
+        "shift":shift,
+        "gap":gap
+        })
 
         if len(loss_cases) == 0:
             st.success("No losses recorded")
