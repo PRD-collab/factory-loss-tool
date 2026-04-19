@@ -1,37 +1,33 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 import plotly.express as px
 import psycopg2
-# ---------------- LOGIN GATE ----------------
 
-import streamlit as st
+# ---------------- LOGIN ----------------
 
-APP_PASSWORD = "1234"   # change this to your desired PIN
+APP_PASSWORD="1234"
 
 if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+    st.session_state.authenticated=False
 
 if not st.session_state.authenticated:
 
     st.title("Factory Loss Tool Login")
 
-    password = st.text_input("Enter Access PIN", type="password")
+    password=st.text_input("Enter PIN",type="password")
 
     if st.button("Login"):
-
-        if password == APP_PASSWORD:
-            st.session_state.authenticated = True
-            st.success("Login successful")
+        if password==APP_PASSWORD:
+            st.session_state.authenticated=True
             st.rerun()
         else:
             st.error("Incorrect PIN")
 
-    st.stop()   # ⛔ THIS STOPS THE APP UNTIL LOGIN IS DONE
+    st.stop()
 
 # ---------------- MACHINES ----------------
 
-machines = {
+machines={
 "AB-1":13000,
 "AB-2":13000,
 "AB-3":13000,
@@ -55,37 +51,18 @@ major_reasons=[
 "Efficiency Loss"
 ]
 
-# ---------------- DATABASE (FIXED) ----------------
+# ---------------- DATABASE ----------------
 
-conn = psycopg2.connect(
-    host=st.secrets["DB_HOST"],
-    port=st.secrets["DB_PORT"],
-    dbname=st.secrets["DB_NAME"],
-    user=st.secrets["DB_USER"],
-    password=st.secrets["DB_PASSWORD"],
-    sslmode="require"
+conn=psycopg2.connect(
+host=st.secrets["DB_HOST"],
+port=st.secrets["DB_PORT"],
+dbname=st.secrets["DB_NAME"],
+user=st.secrets["DB_USER"],
+password=st.secrets["DB_PASSWORD"],
+sslmode="require"
 )
 
-cur = conn.cursor()
-
-cur.execute("""
-CREATE TABLE IF NOT EXISTS losses(
-date TEXT,
-machine TEXT,
-shift TEXT,
-major_reason TEXT,
-detail_reason TEXT,
-percent REAL,
-loss_qty REAL
-)
-""")
-
-conn.commit()
-
-# ---------------- SESSION STATE ----------------
-
-if "stage" not in st.session_state:
-    st.session_state.stage="entry"
+cur=conn.cursor()
 
 # ---------------- SIDEBAR ----------------
 
@@ -93,6 +70,7 @@ menu=st.sidebar.selectbox(
 "Module",
 [
 "Production Entry",
+"View Data",
 "Modify/Delete Data",
 "Pareto Analysis",
 "Merge Reasons"
@@ -100,7 +78,7 @@ menu=st.sidebar.selectbox(
 )
 
 # =================================================
-# PRODUCTION ENTRY MATRIX
+# PRODUCTION ENTRY
 # =================================================
 
 if menu=="Production Entry":
@@ -133,6 +111,18 @@ if menu=="Production Entry":
 
             if gap>0:
 
+                # duplicate prevention
+                cur.execute(
+                "SELECT COUNT(*) FROM losses WHERE date=%s AND machine=%s AND shift=%s",
+                (str(date),machine,shift)
+                )
+
+                exists=cur.fetchone()[0]
+
+                if exists>0:
+                    st.error(f"Data already exists for {machine} {shift}")
+                    st.stop()
+
                 loss_cases.append({
                 "machine":machine,
                 "shift":shift,
@@ -148,10 +138,10 @@ if menu=="Production Entry":
         st.rerun()
 
 # =================================================
-# LOSS ALLOCATION
+# LOSS ENTRY
 # =================================================
 
-    if st.session_state.stage=="loss":
+    if "stage" in st.session_state and st.session_state.stage=="loss":
 
         cases=st.session_state.loss_cases
         idx=st.session_state.case_index
@@ -166,13 +156,14 @@ if menu=="Production Entry":
 
             st.subheader(f"{machine} | {shift} | Loss = {gap}")
 
-            major=st.selectbox("Major Reason",major_reasons,key="major")
+            major=st.selectbox("Major Reason",major_reasons)
 
-            if "detail_rows" not in st.session_state:
-                st.session_state.detail_rows=[{"reason":"","percent":100}]
+            cur.execute(
+            "SELECT DISTINCT detail_reason FROM losses WHERE machine=%s",
+            (machine,)
+            )
 
-            if st.button("Add Detailed Reason"):
-                st.session_state.detail_rows=[{"reason":"","percent":100}]
+            existing=[r[0] for r in cur.fetchall()]
 
             rows=st.session_state.detail_rows
 
@@ -180,11 +171,18 @@ if menu=="Production Entry":
 
                 col1,col2=st.columns([3,1])
 
-                reason=col1.text_input(
-                f"Detail Reason {i+1}",
-                value=row["reason"],
-                key=f"r{i}"
+                dropdown=col1.selectbox(
+                f"Existing Reason {i+1}",
+                [""]+existing,
+                key=f"d{i}"
                 )
+
+                text=col1.text_input(
+                f"Or Enter New Reason {i+1}",
+                key=f"t{i}"
+                )
+
+                reason=dropdown if dropdown else text
 
                 percent=col2.number_input(
                 "%",
@@ -219,7 +217,11 @@ if menu=="Production Entry":
                         loss=gap*(r["percent"]/100)
 
                         cur.execute(
-                        "INSERT INTO losses VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                        """
+                        INSERT INTO losses
+                        (date,machine,shift,major_reason,detail_reason,percent,loss_qty)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                        """,
                         (
                         st.session_state.date,
                         machine,
@@ -235,6 +237,11 @@ if menu=="Production Entry":
 
                     st.session_state.case_index+=1
                     st.session_state.detail_rows=[{"reason":"","percent":100}]
+
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("d") or k.startswith("t") or k.startswith("p"):
+                            del st.session_state[k]
+
                     st.rerun()
 
         else:
@@ -243,12 +250,24 @@ if menu=="Production Entry":
             st.session_state.stage="entry"
 
 # =================================================
+# VIEW DATA
+# =================================================
+
+if menu=="View Data":
+
+    st.title("Database Records")
+
+    df=pd.read_sql("SELECT * FROM losses ORDER BY date DESC",conn)
+
+    st.dataframe(df,use_container_width=True)
+
+# =================================================
 # MODIFY DELETE
 # =================================================
 
 if menu=="Modify/Delete Data":
 
-    st.title("Modify / Delete Data")
+    st.title("Modify / Delete")
 
     df=pd.read_sql("SELECT * FROM losses",conn)
 
@@ -260,7 +279,7 @@ if menu=="Modify/Delete Data":
 
         ddf=df[df["date"]==date]
 
-        st.dataframe(ddf,use_container_width=True)
+        st.dataframe(ddf)
 
         if st.button("Delete This Date"):
 
@@ -275,27 +294,50 @@ if menu=="Modify/Delete Data":
 
 if menu=="Pareto Analysis":
 
-    st.title("Machine Pareto")
+    st.title("Pareto Analysis")
 
     df=pd.read_sql("SELECT * FROM losses",conn)
 
     if len(df)==0:
         st.info("No data")
+
     else:
+
+        df["date"]=pd.to_datetime(df["date"])
+
+        start=st.date_input("Start Date")
+        end=st.date_input("End Date")
+
+        df=df[(df["date"]>=pd.to_datetime(start)) & (df["date"]<=pd.to_datetime(end))]
 
         machine=st.selectbox("Machine",sorted(df["machine"].unique()))
 
         mdf=df[df["machine"]==machine]
 
-        st.subheader("Major Reason Pareto")
-
         major=mdf.groupby("major_reason")["loss_qty"].sum().reset_index()
+
+        major=major.sort_values("loss_qty",ascending=False)
+
+        major["cumperc"]=major["loss_qty"].cumsum()/major["loss_qty"].sum()*100
 
         fig=px.bar(major,x="major_reason",y="loss_qty")
 
-        st.plotly_chart(fig,use_container_width=True)
+        fig.add_scatter(
+        x=major["major_reason"],
+        y=major["cumperc"],
+        mode="lines+markers",
+        yaxis="y2"
+        )
 
-        st.subheader("Detailed Reason Pareto")
+        fig.update_layout(
+        yaxis2=dict(
+        overlaying="y",
+        side="right",
+        title="Cumulative %"
+        )
+        )
+
+        st.plotly_chart(fig,use_container_width=True)
 
         detail=mdf.groupby("detail_reason")["loss_qty"].sum().reset_index()
 
@@ -304,7 +346,7 @@ if menu=="Pareto Analysis":
         st.plotly_chart(fig2,use_container_width=True)
 
 # =================================================
-# MERGE REASONS
+# MERGE
 # =================================================
 
 if menu=="Merge Reasons":
@@ -317,15 +359,15 @@ if menu=="Merge Reasons":
         st.info("No data")
     else:
 
-        machine=st.selectbox("Select Machine",sorted(df["machine"].unique()))
+        machine=st.selectbox("Machine",sorted(df["machine"].unique()))
 
         mdf=df[df["machine"]==machine]
 
         reasons=sorted(mdf["detail_reason"].unique())
 
-        selected=st.multiselect("Reasons to Merge",reasons)
+        selected=st.multiselect("Reasons",reasons)
 
-        new_name=st.text_input("New Reason Name")
+        new_name=st.text_input("New Reason")
 
         if st.button("Merge"):
 
@@ -338,4 +380,4 @@ if menu=="Merge Reasons":
 
             conn.commit()
 
-            st.success("Merged successfully")
+            st.success("Merged")
